@@ -1,0 +1,110 @@
+name: Deploy to GitHub Pages
+
+# データはアプリ版リポジトリ (CreditDB-Pro-Mobile) の週次更新が Release に公開する。
+# ここでは毎日その Release を確認し、新しいデータがあるときだけビルドして公開する。
+# push したときと手動実行のときは、データが同じでも必ず公開する。
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *' # 毎日 06:00 UTC（日本時間 15:00）。月曜 00:00 UTC の週次更新が遅れても当日中に拾える
+  workflow_dispatch:
+
+permissions:
+  contents: write # 定期実行を止めないための記録コミット
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Check for new data
+        id: check
+        run: |
+          LATEST=$(python scripts/build_web_db.py --print-latest-tag)
+          DEPLOYED=$(curl -fsSL "${{ steps.pages.outputs.base_url }}/data/version.json" \
+            | python -c "import json,sys; print(json.load(sys.stdin).get('sourceTag',''))" || echo "")
+          echo "最新のデータ: ${LATEST} / 公開中: ${DEPLOYED:-なし}"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$LATEST" = "$DEPLOYED" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "新しいデータがないので公開しません（${LATEST}）" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Node.js
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: npm ci
+
+      - name: Build database
+        # アプリ側の DB の形が Web の想定と合わなければここで失敗し、サイトは前回のまま残る
+        if: steps.check.outputs.skip != 'true'
+        run: python scripts/build_web_db.py --out-dir public/data
+
+      - name: Build site
+        if: steps.check.outputs.skip != 'true'
+        run: npm run build
+
+      - name: Upload Pages artifact
+        if: steps.check.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+      - name: Keep scheduled workflows active
+        # GitHub はリポジトリに60日間コミットがないと定期実行を止める。
+        # 最後のコミットから45日たっていたら、記録用のファイルを1つコミットして止まらないようにする。
+        if: always() && github.event_name == 'schedule'
+        run: |
+          LAST=$(git log -1 --format=%ct)
+          DAYS=$(( ($(date +%s) - LAST) / 86400 ))
+          if [ "$DAYS" -ge 45 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            date -u +'%Y-%m-%dT%H:%M:%SZ' > .github/keepalive
+            git add .github/keepalive
+            git commit -m "Keep scheduled workflows active"
+            git push
+          fi
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

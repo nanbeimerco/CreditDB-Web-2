@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <rect width="48" height="48" rx="12" fill="#1D2024"/>
+  <rect x="2" y="2" width="44" height="44" rx="10" stroke="#444746" stroke-width="1.5"/>
+  <path d="M12 14C12 12.8954 12.8954 12 14 12H34C35.1046 12 36 12.8954 36 14V34C36 35.1046 35.1046 36 34 36H14C12.8954 36 12 35.1046 12 34V14Z" fill="#00468A"/>
+  <path d="M12 17H36M12 31H36M18 12V36M30 12V36" stroke="#A8C7FA" stroke-width="2" stroke-linecap="round"/>
+  <rect x="24" y="24" width="16" height="12" rx="3" fill="#A8C7FA"/>
+  <text x="26" y="33" fill="#003062" font-family="'Google Sans', system-ui, sans-serif" font-weight="900" font-size="8">PRO</text>
+</svg>

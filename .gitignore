@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.vite/
+# DB はビルド時にアプリ版の Release から作る（git には入れない）
+public/data/creditdb.dat
+public/data/version.json
+__pycache__/
